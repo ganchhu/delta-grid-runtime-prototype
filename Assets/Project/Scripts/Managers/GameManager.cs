@@ -1,31 +1,17 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Drawing;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    [SerializeField] public TMP_Text TriesText;
+    [SerializeField] public TMP_Text CorrectText;
+    [SerializeField] public TMP_Text RemainingText;
+    [SerializeField] public TMP_Text BestAccuracyText;
     public static GameManager Instance;
     [Header("Board Settings")]
     [SerializeField] public int rows = 4;
@@ -37,7 +23,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Card cardPrefab;
     [SerializeField] private Transform cardParent;
     [SerializeField] private Sprite[] sprites;
-    [SerializeField] private int gridSize = 4;
+    //[SerializeField] private int gridSize = 4;
     [SerializeField] private Sprite cardBackSprite;
     private List<Card> cards = new List<Card>();
     private Card firstSelected;
@@ -56,9 +42,9 @@ public class GameManager : MonoBehaviour
     private int correctMatches;
     private int totalMatches;
 
-    public event System.Action OnGameStarted;
-    public event System.Action OnGameWon;
-    public event System.Action<int, int> OnScoreUpdated;
+    //public event System.Action OnGameStarted;
+    //public event System.Action OnGameWon;
+    //public event System.Action<int, int> OnScoreUpdated;
     private enum GameState
     {
         Preview,
@@ -70,7 +56,7 @@ public class GameManager : MonoBehaviour
     private void Awake()
     {
         Instance = this;
-        UIManager.Instance.ShowHome();
+      //  UIManager.Instance.ShowHome();
     }
 
     private void Start()
@@ -86,6 +72,8 @@ public class GameManager : MonoBehaviour
         ScoreManager.Instance.ResetScore();
         GenerateBoard();
         StartCoroutine(PreviewPhase());
+        SaveData data = SaveManager.Instance.Load();
+        BestAccuracyText.text = data.bestAccuracy.ToString("F1") + "%";
     }
 
     private void GenerateBoard()
@@ -93,6 +81,7 @@ public class GameManager : MonoBehaviour
         totalMatches = matchesRemaining;
         totalTries = 0;
         correctMatches = 0;
+          
 
         foreach (var c in cards)
             Destroy(c.gameObject);
@@ -126,8 +115,11 @@ public class GameManager : MonoBehaviour
         }
 
         PositionCards(rows, columns);
+        TriesText.text = "0";
+        CorrectText.text = "0";
+        RemainingText.text = (rows * columns / 2).ToString();
     }
-
+    [SerializeField] private float cardAspect = 2f / 3f;
     private void PositionCards(int rows, int cols)
     {
         float boardWidth = boardArea.rect.width;
@@ -138,25 +130,37 @@ public class GameManager : MonoBehaviour
 
         float cellWidth = (boardWidth - totalSpacingX) / cols;
         float cellHeight = (boardHeight - totalSpacingY) / rows;
+        float cardWidth;
+        float cardHeight;
+        cardHeight = cellHeight;
+        cardWidth = cardHeight * cardAspect;
 
-        float size = Mathf.Min(cellWidth, cellHeight);
+        if (cardWidth > cellWidth)
+        {
+            cardWidth = cellWidth;
+            cardHeight = cardWidth / cardAspect;
+        }
 
-        float gridWidth = size * cols + totalSpacingX;
-        float gridHeight = size * rows + totalSpacingY;
+        //float size = Mathf.Min(cellWidth, cellHeight);
 
-        float startX = -gridWidth / 2f + size / 2f;
-        float startY = gridHeight / 2f - size / 2f;
+       // float gridWidth = size * cols + totalSpacingX;
+       // float gridHeight = size * rows + totalSpacingY;
+        float gridWidth = cardWidth * cols + totalSpacingX;
+        float gridHeight = cardHeight * rows + totalSpacingY;
+
+        float startX = -gridWidth / 2f + cardWidth / 2f;
+        float startY = gridHeight / 2f - cardHeight / 2f;
 
         for (int i = 0; i < cards.Count; i++)
         {
             int row = i / cols;
             int col = i % cols;
 
-            float x = startX + col * (size + spacing);
-            float y = startY - row * (size + spacing);
+            float x = startX + col * (cardWidth + spacing);
+            float y = startY - row * (cardHeight + spacing);
 
             RectTransform rt = cards[i].GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(size, size);
+            rt.sizeDelta = new Vector2(cardWidth, cardHeight);
             rt.anchoredPosition = new Vector2(x, y);
         }
     }
@@ -244,19 +248,19 @@ public class GameManager : MonoBehaviour
         inputLocked = true;
         ScoreManager.Instance.AddTry();
         // totalTries++;
-        // triesText.text = "Tries: " + totalTries;
+         TriesText.text = ScoreManager.Instance.GetTries().ToString();
 
         yield return new WaitForSeconds(0.4f);
 
         if (firstSelected.Data.id == secondSelected.Data.id)
         {
-            correctMatches++;
-            //  correctText.text = "Correct Matches: " + correctMatches;
             ScoreManager.Instance.AddCorrect();
+            CorrectText.text = ScoreManager.Instance.GetCorrectMatches().ToString();
             firstSelected.SetMatched();
             secondSelected.SetMatched();
 
             matchesRemaining--;
+            RemainingText.text = matchesRemaining.ToString();
             AudioManager.Instance.Play(AudioManager.SFX.Match);
             if (matchesRemaining == 0)
                 HandleGameWin();
@@ -294,16 +298,11 @@ public class GameManager : MonoBehaviour
             data.bestAccuracy = accuracy;
         }
 
-        // Optional: also save last score
+ 
         data.score = ScoreManager.Instance.TotalTries;
-
+        Debug.Log("Saving Score: " + data.score + ", Accuracy: " + data.bestAccuracy);
         SaveManager.Instance.Save(data);
-
-        UIManager.Instance.ShowWinPanel(
-            ScoreManager.Instance.TotalTries,
-            ScoreManager.Instance.CorrectMatches,
-            accuracy
-        );
+        UIManager.Instance.ShowWinPanel(ScoreManager.Instance.TotalTries,accuracy,data.bestAccuracy);
         AudioManager.Instance.Play(AudioManager.SFX.GameWin);
     }
     public void RestartGame()

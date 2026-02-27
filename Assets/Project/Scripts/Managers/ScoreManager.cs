@@ -9,6 +9,7 @@ public class ScoreManager : MonoBehaviour
     public int TotalTries;
     public int CorrectMatches;
 
+
     private void Awake()
     {
         Instance = this;
@@ -28,6 +29,17 @@ public class ScoreManager : MonoBehaviour
         if (TotalTries == 0) return 0;
         return (float)CorrectMatches / TotalTries * 100f;
     }
+    public int GetTries()
+    {
+        if (TotalTries == 0) return 0;
+        return  TotalTries;
+    }
+    public int GetCorrectMatches()
+    {
+        if (CorrectMatches == 0) return 0;
+        return CorrectMatches;
+    }
+
 
 
 }

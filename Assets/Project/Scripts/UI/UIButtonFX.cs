@@ -10,7 +10,6 @@ public class UIButtonFX : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
     [SerializeField] private float animationSpeed = 10f;
 
     [Header("Sound Settings")]
-    [SerializeField] private bool playHoverSound = true;
     [SerializeField] private bool playClickSound = true;
 
     private Vector3 originalScale;

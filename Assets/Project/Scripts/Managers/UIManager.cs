@@ -8,46 +8,45 @@ public class UIManager : MonoBehaviour
     public static UIManager Instance;
 
     private int totalTries;
-    private int correctMatches;
+   // private int correctMatches;
     private int totalMatches;
-    [SerializeField] private TMP_Text triesText;
-    [SerializeField] private TMP_Text correctText;
-    [SerializeField] private TMP_Text accuracyText;
-    //[SerializeField] private GameObject homePanel;
-    //[SerializeField] private GameObject gamePanel;
-    //[SerializeField] private GameObject winPanel;
+    [SerializeField] public TMP_Text triesText; 
+    [SerializeField] public TMP_Text accuracyText;
+    [SerializeField] public TMP_Text BestAccracy;
     [SerializeField] GameObject[] panels;
 
     private void Awake()
     {
         Instance = this;
+        ShowHome();
     }
 
     public void ShowHome()
     {
-        showpanel(0);
+        showpanel(0);       
     }
 
     public void ShowGame()
     {
         showpanel(1);
     }
-
+    public void ShowSetting()
+    {
+        panels[3].SetActive(true);
+    }
     public void ShowWin()
     {
         showpanel(2);
         Getthedetails();
-
     }
    
     private void Getthedetails()
     {
         totalTries = GameManager.Instance.GetTotalTries();
-        triesText.text = $"Tries: {GameManager.Instance.GetTotalTries()}";
-        correctMatches = GameManager.Instance.GetCorrectMatches();
-        correctText.text = $"Correct Matches: {GameManager.Instance.GetCorrectMatches()}";
-        totalMatches = GameManager.Instance.GetTotalMatches();
-        accuracyText.text = $"Accuracy: {((float)correctMatches / totalTries * 100):F1}%";
+        triesText.text = GameManager.Instance.GetTotalTries().ToString();
+        accuracyText.text = GameManager.Instance.GetAccuracyPercentage().ToString();
+        BestAccracy.text= ScoreManager.Instance.GetAccuracy().ToString("F1") + "%";
+
     }
 
 
@@ -97,13 +96,12 @@ public class UIManager : MonoBehaviour
         }
             
     }
-    public void ShowWinPanel(int tries, int correct, float accuracy)
+    public void ShowWinPanel(int tries, float correct, float accuracy)
     {
         ShowWin();
-        Debug.LogError("came here" + panels[2].activeSelf.ToString());
-        triesText.text = "Tries: " + tries;
-        correctText.text = "Correct: " + correct;
-        accuracyText.text = "Accuracy: " + accuracy.ToString("F1") + "%";
+        triesText.text =  tries.ToString();
+        accuracyText.text = correct.ToString();
+        BestAccracy.text = accuracy.ToString("F1") + "%";
     }
 
 
