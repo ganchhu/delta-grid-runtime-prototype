@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.Audio;
 using UnityEngine.UIElements;
@@ -53,8 +54,6 @@ public class AudioManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
-
-        LoadVolumeSettings();
     }
     private void Start()
     {
@@ -88,17 +87,10 @@ public class AudioManager : MonoBehaviour
         }
     }
 
-    private void LoadVolumeSettings()
-    {
-        //masterVolume = PlayerPrefs.GetFloat("MasterVolume", masterVolume);
-        //bgVolume = PlayerPrefs.GetFloat("BGVolume", bgVolume);
-        //interactionVolume = PlayerPrefs.GetFloat("InteractionVolume", interactionVolume);
-        //SFXVolume = PlayerPrefs.GetFloat("SFXVolume", SFXVolume);
-    }
+   
     public void SetMasterVolume(float value)
     {
-        masterVolume = value;
-      //  PlayerPrefs.SetFloat("MasterVolume", value);
+        masterVolume = value;      
         SetVolume(masterVolumeParam, value);
     }
     private void OnValidate()

@@ -7,18 +7,57 @@ public class UIManager : MonoBehaviour
 {
     public static UIManager Instance;
 
-    private int totalTries;
+  //  private int totalTries;
    // private int correctMatches;
-    private int totalMatches;
+    //private int totalMatches;
     [SerializeField] public TMP_Text triesText; 
     [SerializeField] public TMP_Text accuracyText;
     [SerializeField] public TMP_Text BestAccracy;
     [SerializeField] GameObject[] panels;
 
+    [Header("game panel")]
+    [SerializeField] public TMP_Text TriesText;
+    [SerializeField] public TMP_Text CorrectText;
+    [SerializeField] public TMP_Text RemainingText;
+
+    [SerializeField] private GameObject resumePanel;
+
+
     private void Awake()
     {
         Instance = this;
         ShowHome();
+    }
+    private void OnEnable()
+    {
+        GameManager.OnScoreUpdated += UpdateScoreUI;
+        GameManager.OnGameWon += ShowWinPanel;
+    }
+
+    public void ShowResumePanel()
+    {
+        resumePanel.SetActive(true);
+    }
+
+
+    public void ResumeGame()
+    {
+        resumePanel.SetActive(false);
+        ShowGame();
+        GameManager.Instance.StartGame(); 
+    }
+
+    public void StartNewGameFromResume()
+    {
+        SaveManager.Instance.DeleteSave();
+        resumePanel.SetActive(false);
+        ShowHome();
+    }
+
+    private void OnDisable()
+    {
+        GameManager.OnScoreUpdated -= UpdateScoreUI;
+        GameManager.OnGameWon -= ShowWinPanel;
     }
 
     public void ShowHome()
@@ -32,26 +71,41 @@ public class UIManager : MonoBehaviour
     }
     public void ShowSetting()
     {
-        panels[3].SetActive(true);
+        if (panels.Length > 3)
+            panels[3].SetActive(true);
     }
     public void ShowWin()
     {
         showpanel(2);
-        Getthedetails();
+      
     }
-   
-    private void Getthedetails()
+    private void showpanel(int value)
     {
-        totalTries = GameManager.Instance.GetTotalTries();
-        triesText.text = GameManager.Instance.GetTotalTries().ToString();
-        accuracyText.text = GameManager.Instance.GetAccuracyPercentage().ToString();
-        BestAccracy.text= ScoreManager.Instance.GetAccuracy().ToString("F1") + "%";
+        for (int i = 0; i < panels.Length; i++)
+        {
+            panels[i].SetActive(i == value);
+        }
 
     }
-
-
+    public void ShowWinPanel(int tries, float accuracy, float bestAccuracy)
+    {
+        ShowWin();
+        triesText.text = tries.ToString();
+        accuracyText.text = accuracy.ToString("F1") + "%";
+        BestAccracy.text = bestAccuracy.ToString("F1") + "%";
+    }
+    private void UpdateScoreUI(int tries, int correct)
+    {
+        triesText.text = tries.ToString();
+        accuracyText.text = correct.ToString(); // if this is Remaining text
+    }
+    public void UpdateRemaining(int remaining)
+    {
+        RemainingText.text = remaining.ToString();
+    }
     public void setthegame(int value)
     {
+        SaveManager.Instance.ClearResume();
         switch (value)
         {
             case 0:
@@ -75,34 +129,23 @@ public class UIManager : MonoBehaviour
         ShowGame();
         GameManager.Instance.StartGame();
     }
-
     public void restart()
     {
         GameManager.Instance.RestartGame();
         ShowGame();
     }
-
     public void Backfromgame()
     {
         GameManager.Instance.StopGame();
                ShowHome();
 
     }
-    private void showpanel(int value)
+    
+    public void clearsavedData()
     {
-        for (int i = 0; i < panels.Length; i++)
-        {
-            panels[i].SetActive(i==value);
-        }
-            
+        SaveManager.Instance.DeleteSave();
     }
-    public void ShowWinPanel(int tries, float correct, float accuracy)
-    {
-        ShowWin();
-        triesText.text =  tries.ToString();
-        accuracyText.text = correct.ToString();
-        BestAccracy.text = accuracy.ToString("F1") + "%";
-    }
+  
 
 
 

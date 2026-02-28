@@ -1,50 +1,58 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Drawing;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
+
 
 public class GameManager : MonoBehaviour
 {
-
-    [SerializeField] public TMP_Text TriesText;
-    [SerializeField] public TMP_Text CorrectText;
-    [SerializeField] public TMP_Text RemainingText;
-    [SerializeField] public TMP_Text BestAccuracyText;
     public static GameManager Instance;
+
     [Header("Board Settings")]
     [SerializeField] public int rows = 4;
     [SerializeField] public int columns = 4;
     [SerializeField] private RectTransform boardArea;
     [SerializeField] private float spacing = 10f;
+    [SerializeField] private float cardAspect = 2f / 3f;
 
     [Header("Card Settings")]
     [SerializeField] private Card cardPrefab;
     [SerializeField] private Transform cardParent;
     [SerializeField] private Sprite[] sprites;
-    //[SerializeField] private int gridSize = 4;
-    [SerializeField] private Sprite cardBackSprite;
-    private List<Card> cards = new List<Card>();
-    private Card firstSelected;
-    private Card secondSelected;
-    private int matchesRemaining;
-    private bool inputLocked;
 
     [Header("Preview")]
     [SerializeField] private float previewDuration = 2f;
-    private GameState currentState;
+
+    [SerializeField] private List<Card> cards = new List<Card>();
+    [SerializeField] private List<Card> selectedCards = new List<Card>();
+    private Coroutine previewCoroutine;
+    [SerializeField] private Sprite cardBackSprite;
+    [SerializeField] private int matchesRemaining;
+
+    // Events 
+    public static System.Action<int, int> OnScoreUpdated;
+    public static System.Action<int, float, float> OnGameWon;
+    public static System.Action OnMatch;
+    public static System.Action OnMismatch;
+    public static System.Action OnGameStart;
+
+    [SerializeField] public TMP_Text TriesText;
+    [SerializeField] public TMP_Text CorrectText;
+    [SerializeField] public TMP_Text RemainingText;
+    [SerializeField] public TMP_Text BestAccuracyText;
+
+    private Card firstSelected;
+    private Card secondSelected;
+    private bool inputLocked;
+
 
 
     [Header("References")]
-
     private int totalTries;
     private int correctMatches;
     private int totalMatches;
 
-    //public event System.Action OnGameStarted;
-    //public event System.Action OnGameWon;
-    //public event System.Action<int, int> OnScoreUpdated;
+
     private enum GameState
     {
         Preview,
@@ -56,70 +64,276 @@ public class GameManager : MonoBehaviour
     private void Awake()
     {
         Instance = this;
-      //  UIManager.Instance.ShowHome();
+      
     }
 
     private void Start()
     {
-      //  StartGame();
+        SaveData data = SaveManager.Instance.Load();
+
+        if (data != null && data.currentGame != null)
+        {
+            UIManager.Instance.ShowResumePanel();
+        }
+        else
+        {
+            UIManager.Instance.ShowHome();
+        }
     }
 
-
+    #region Board Generation
 
     public void StartGame()
     {
-        UIManager.Instance.ShowGame();
+        if (previewCoroutine != null)
+        {
+            StopCoroutine(previewCoroutine);
+            previewCoroutine = null;
+        }
+        ClearBoard();
+        selectedCards.Clear();
+        if (ScoreManager.Instance == null)
+            return;
+
         ScoreManager.Instance.ResetScore();
-        GenerateBoard();
-        StartCoroutine(PreviewPhase());
-        SaveData data = SaveManager.Instance.Load();
-        BestAccuracyText.text = data.bestAccuracy.ToString("F1") + "%";
+
+        SaveData data = SaveManager.Instance != null
+            ? SaveManager.Instance.Load()
+            : null;
+
+        if (data != null && data.currentGame != null)
+        {
+            RestoreGame(data.currentGame);
+        }
+        else
+        {
+            GenerateBoard();
+            previewCoroutine = StartCoroutine(PreviewPhase());
+        }
+
+        if (data != null && BestAccuracyText != null)
+            BestAccuracyText.text = data.bestAccuracy.ToString("F1") + "%";
     }
 
     private void GenerateBoard()
     {
-        totalMatches = matchesRemaining;
-        totalTries = 0;
-        correctMatches = 0;
-          
-
-        foreach (var c in cards)
-            Destroy(c.gameObject);
-
-        cards.Clear();
-
+        ClearBoard();
         int totalCards = rows * columns;
 
-        if (totalCards % 2 != 0)
-        {
-            Debug.LogError("Total cards must be even!");
-            return;
-        }
-
         matchesRemaining = totalCards / 2;
+        totalMatches = matchesRemaining;
 
         List<int> spriteIDs = GenerateSpritePairs(totalCards);
 
         for (int i = 0; i < totalCards; i++)
         {
-            Card newCard = Instantiate(cardPrefab, boardArea);
-
-            CardData data = new CardData
-            {
-                id = spriteIDs[i],
-                frontSprite = sprites[spriteIDs[i]]
-            };
-
-            newCard.Init(data, cardBackSprite, OnCardSelected);
-            cards.Add(newCard);
+            CreateCard(spriteIDs[i]);
         }
 
         PositionCards(rows, columns);
         TriesText.text = "0";
         CorrectText.text = "0";
-        RemainingText.text = (rows * columns / 2).ToString();
+        RemainingText.text = matchesRemaining.ToString();
+        OnScoreUpdated?.Invoke(0, 0);
+
+        SaveData data = SaveManager.Instance.Load();
+    if (data != null)
+            BestAccuracyText.text = data.bestAccuracy.ToString("F1") + "%";
+    else
+        {
+            BestAccuracyText.text = "0.0%";
+        }
+
+
     }
-    [SerializeField] private float cardAspect = 2f / 3f;
+
+    private void CreateCard(int spriteID)
+    {
+        Card newCard = Instantiate(cardPrefab, boardArea);
+
+        CardData data = new CardData
+        {
+            id = spriteID,
+            frontSprite = sprites[spriteID]
+        };
+
+        newCard.Init(data, cardBackSprite, OnCardSelected);
+        cards.Add(newCard);
+    }
+
+    private List<int> GenerateSpritePairs(int totalCards)
+    {
+        List<int> ids = new List<int>();
+
+        for (int i = 0; i < totalCards / 2; i++)
+        {
+            int spriteIndex = Random.Range(0, sprites.Length);
+            ids.Add(spriteIndex);
+            ids.Add(spriteIndex);
+        }
+
+        for (int i = 0; i < ids.Count; i++)
+        {
+            int randomIndex = Random.Range(0, ids.Count);
+            (ids[i], ids[randomIndex]) = (ids[randomIndex], ids[i]);
+        }
+
+        return ids;
+    }
+    private void ClearBoard()
+    {
+        if (previewCoroutine != null)
+        {
+            StopCoroutine(previewCoroutine);
+            previewCoroutine = null;
+        }
+
+        foreach (var c in cards)
+        {
+            if (c != null)
+            {
+                c.StopAllCoroutines();
+                Destroy(c.gameObject);
+            }
+        }
+
+        cards.Clear();
+        selectedCards.Clear();
+    }
+    #endregion   
+
+    #region Continuous Flipping
+    private void OnCardSelected(Card selected)
+    {
+        if (selected.IsFaceUp || selected.IsMatched)
+            return;
+
+        selected.FlipUp();
+        selectedCards.Add(selected);
+
+        if (selectedCards.Count == 2)
+        {
+            StartCoroutine(ResolvePair(selectedCards[0], selectedCards[1]));
+            selectedCards.Clear();
+        }       
+    }
+    private IEnumerator ResolvePair(Card first, Card second)
+    {
+        ScoreManager.Instance.AddTry();
+        TriesText.text = ScoreManager.Instance.TotalTries.ToString();
+        OnScoreUpdated?.Invoke(ScoreManager.Instance.TotalTries,ScoreManager.Instance.CorrectMatches);
+
+        yield return new WaitForSeconds(0.4f);
+
+        if (first.Data.id == second.Data.id)
+        {
+            ScoreManager.Instance.AddCorrect();
+            CorrectText.text = ScoreManager.Instance.CorrectMatches.ToString();
+            matchesRemaining--;
+            RemainingText.text = matchesRemaining.ToString();
+
+            first.SetMatched();
+            second.SetMatched();
+
+            OnMatch?.Invoke();
+
+            OnScoreUpdated?.Invoke(ScoreManager.Instance.TotalTries,ScoreManager.Instance.CorrectMatches);
+
+            if (matchesRemaining == 0)
+                HandleGameWin();
+        }
+        else
+        {
+            first.FlipDown();
+            second.FlipDown();
+            OnMismatch?.Invoke();
+        }
+    }
+
+    #endregion
+
+    #region Win Handling
+    private void HandleGameWin()
+    {
+        float accuracy = ScoreManager.Instance.GetAccuracy();
+        SaveData data = SaveManager.Instance.Load() ?? new SaveData();
+        // Compare and update
+        if (accuracy > data.bestAccuracy)
+        {
+            data.bestAccuracy = accuracy;
+        }
+
+        data.currentGame = null;
+        SaveManager.Instance.Save(data);  
+        SaveManager.Instance.DeleteSave();
+        OnGameWon?.Invoke(ScoreManager.Instance.TotalTries,accuracy,data.bestAccuracy);        
+        AudioManager.Instance.Play(AudioManager.SFX.GameWin);
+    }
+    #endregion
+
+    #region Save / Resume
+    private void OnApplicationPause(bool pause)
+    {
+        if (pause)
+            SaveCurrentGame();
+    }
+    private void OnApplicationQuit()
+    {
+        SaveCurrentGame();
+    }
+    private void SaveCurrentGame()
+    {
+        if (matchesRemaining <= 0) return;
+
+        SaveData data = SaveManager.Instance.Load() ?? new SaveData();
+        GameSaveState state = new GameSaveState();
+
+        state.rows = rows;
+        state.columns = columns;
+        state.totalTries = ScoreManager.Instance.TotalTries;
+        state.correctMatches = ScoreManager.Instance.CorrectMatches;
+        state.matchesRemaining = matchesRemaining;
+        foreach (var card in cards)
+        {
+            state.spriteIDs.Add(card.Data.id);
+            state.matchedStates.Add(card.IsMatched);
+            //state.faceUpStates.Add(card.IsFaceUp);
+        }
+        data.currentGame = state;
+        SaveManager.Instance.Save(data);
+    }
+    private void RestoreGame(GameSaveState state)
+    {
+        rows = state.rows;
+        columns = state.columns;
+        matchesRemaining = state.matchesRemaining;
+
+        ClearBoard();
+
+        for (int i = 0; i < state.spriteIDs.Count; i++)
+        {
+            CreateCard(state.spriteIDs[i]);
+
+            if (state.matchedStates[i])
+                cards[i].SetMatchedInstant();
+            else 
+                cards[i].ResetCard();            
+        }
+
+        PositionCards(rows, columns);
+
+        ScoreManager.Instance.TotalTries = state.totalTries;
+        ScoreManager.Instance.CorrectMatches = state.correctMatches;
+        TriesText.text = state.totalTries.ToString();
+        CorrectText.text = state.correctMatches.ToString();
+        RemainingText.text = matchesRemaining.ToString();
+        selectedCards.Clear();
+        OnScoreUpdated?.Invoke(state.totalTries, state.correctMatches);
+    }
+
+    #endregion
+
+    #region Layout
     private void PositionCards(int rows, int cols)
     {
         float boardWidth = boardArea.rect.width;
@@ -141,10 +355,6 @@ public class GameManager : MonoBehaviour
             cardHeight = cardWidth / cardAspect;
         }
 
-        //float size = Mathf.Min(cellWidth, cellHeight);
-
-       // float gridWidth = size * cols + totalSpacingX;
-       // float gridHeight = size * rows + totalSpacingY;
         float gridWidth = cardWidth * cols + totalSpacingX;
         float gridHeight = cardHeight * rows + totalSpacingY;
 
@@ -165,209 +375,86 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private List<int> GenerateSpritePairs(int totalCards)
-    {
-        List<int> ids = new List<int>();
+    #endregion
 
-        for (int i = 0; i < totalCards / 2; i++)
-        {
-            int spriteIndex = Random.Range(0, sprites.Length);
-            ids.Add(spriteIndex);
-            ids.Add(spriteIndex);
-        }
-
-        // Shuffle
-        for (int i = 0; i < ids.Count; i++)
-        {
-            int randomIndex = Random.Range(0, ids.Count);
-            (ids[i], ids[randomIndex]) = (ids[randomIndex], ids[i]);
-        }
-
-        return ids;
-    }
-
+    #region"Transitions"
     private IEnumerator PreviewPhase()
     {
-        currentState = GameState.Preview;
-        inputLocked = true;
+        List<Card> snapshot = new List<Card>(cards);
 
-        // Open all cards
-        foreach (var card in cards)
+        foreach (var card in snapshot)
         {
-            card.FlipUp();
-            card.SetInteractable(false);
-        }    
+            if (card != null && card.gameObject.activeInHierarchy)
+                card.FlipUp();
+        }
         yield return new WaitForSeconds(previewDuration);
         // Close all cards
-        foreach (var card in cards)
+        foreach (var card in snapshot)
         {
-            card.FlipDown();
-            card.SetInteractable(true);
+            if (card != null && card.gameObject.activeInHierarchy)
+                card.FlipDown();
         }
-        inputLocked = false;
-        currentState = GameState.Playing;
+
+        OnGameStart?.Invoke();
         AudioManager.Instance.Play(AudioManager.SFX.GameStart);
-    }
-
-
-    
+    }    
     public void StopGame()
     {
+        ClearBoard();
         ScoreManager.Instance.ResetScore();
-        currentState = GameState.GameOver;
-        inputLocked = true;
-        StopAllCoroutines();
-        foreach (var card in cards)
-            Destroy(card.gameObject);
-        cards.Clear();
-     //   AudioManager.Instance.Play(AudioManager.SFX.GameOver);
+        //   AudioManager.Instance.Play(AudioManager.SFX.GameOver);
 
-    }
-
-    private void OnCardSelected(Card selected)
-    {
-        if (currentState != GameState.Playing) return;
-        if (inputLocked) return;
-        if (selected.IsFaceUp) return;
-        if (selected.IsMatched) return;
-
-        selected.FlipUp();
-
-        if (firstSelected == null)
-        {
-            firstSelected = selected;
-            return;
-        }
-
-        secondSelected = selected;
-        StartCoroutine(ResolveSelection());
-    }
-    private IEnumerator ResolveSelection()
-    {
-        currentState = GameState.Resolving;
-        inputLocked = true;
-        ScoreManager.Instance.AddTry();
-        // totalTries++;
-         TriesText.text = ScoreManager.Instance.GetTries().ToString();
-
-        yield return new WaitForSeconds(0.4f);
-
-        if (firstSelected.Data.id == secondSelected.Data.id)
-        {
-            ScoreManager.Instance.AddCorrect();
-            CorrectText.text = ScoreManager.Instance.GetCorrectMatches().ToString();
-            firstSelected.SetMatched();
-            secondSelected.SetMatched();
-
-            matchesRemaining--;
-            RemainingText.text = matchesRemaining.ToString();
-            AudioManager.Instance.Play(AudioManager.SFX.Match);
-            if (matchesRemaining == 0)
-                HandleGameWin();
-            //GameOver();
-        }
-        else
-        {
-            AudioManager.Instance.Play(AudioManager.SFX.Mismatch);
-            firstSelected.FlipDown();
-            secondSelected.FlipDown();
-        }
-
-        firstSelected = null;
-        secondSelected = null;
-
-        yield return new WaitForSeconds(0.3f);
-
-        inputLocked = false;
-        currentState = GameState.Playing;
-    }
-    private void HandleGameWin()
-    {
-        currentState = GameState.GameOver;
-
-        float accuracy = ScoreManager.Instance.GetAccuracy();
-        SaveData data = SaveManager.Instance.Load();
-        if (data == null)
-        {
-            data = new SaveData();
-        }
-
-        // Compare and update
-        if (accuracy > data.bestAccuracy)
-        {
-            data.bestAccuracy = accuracy;
-        }
-
- 
-        data.score = ScoreManager.Instance.TotalTries;
-        Debug.Log("Saving Score: " + data.score + ", Accuracy: " + data.bestAccuracy);
-        SaveManager.Instance.Save(data);
-        UIManager.Instance.ShowWinPanel(ScoreManager.Instance.TotalTries,accuracy,data.bestAccuracy);
-        AudioManager.Instance.Play(AudioManager.SFX.GameWin);
     }
     public void RestartGame()
     {
-        StopAllCoroutines();
+        if (previewCoroutine != null)
+        {
+            StopCoroutine(previewCoroutine);
+            previewCoroutine = null;
+        }
+        SaveData data = SaveManager.Instance.Load();
+        if (data != null)
+        {
+            data.currentGame = null;
+            SaveManager.Instance.Save(data);
+        }
+        ClearBoard();
+        ScoreManager.Instance.ResetScore();
+        GenerateBoard();
+        StartCoroutine(RestartWithPreview());
+       // previewCoroutine = StartCoroutine(PreviewPhase());
+        UIManager.Instance.ShowGame();
+    }
+    private IEnumerator RestartWithPreview()
+    {
         UIManager.Instance.ShowGame();
 
-        foreach (var card in cards)
-            Destroy(card.gameObject);
-        cards.Clear();
-        StartGame();
+        yield return null;          
+        yield return new WaitForEndOfFrame(); 
+
+        previewCoroutine = StartCoroutine(PreviewPhase());
     }
     public void ReturnHome()
     {
         UIManager.Instance.ShowHome();
-    }
-    
-
-
-
-
-
-
-
-
+    }    
     private float GetAccuracy()
     {
         if (totalTries == 0) return 0;
         return (float)correctMatches / totalTries * 100f;
     }
-
-
-    private void GameOver()
-    {
-        currentState = GameState.GameOver;
-
-        float accuracy = GetAccuracy();
-        //triesText.text = "Tries: " + totalTries;
-        //correctText.text = "Correct Matches: " + correctMatches;
-        //accuracyText.text = "Accuracy: " + accuracy.ToString("F1") + "%";
-        UIManager.Instance.ShowWinPanel(totalTries,correctMatches, accuracy);
-
-  
-    }
-   
-
-   
-   
-
     public void ShowHome()
     {
         UIManager.Instance.ShowHome();
     }
-
     public void ShowGame()
     {
         UIManager.Instance.ShowGame();
     }
-
     public void ShowWin()
     {
         UIManager.Instance.ShowWin();
-    }   
-
-
+    } 
     public int GetTotalTries()
     {
         return totalTries;
@@ -385,5 +472,5 @@ public class GameManager : MonoBehaviour
         if (totalTries == 0) return 0f;
         return (float)correctMatches / totalTries * 100f;
     }
-
+    #endregion
 }

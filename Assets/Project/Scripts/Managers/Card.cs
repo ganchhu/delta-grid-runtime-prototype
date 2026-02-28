@@ -9,12 +9,11 @@ public class Card : MonoBehaviour
 {
     [Header("Visuals")]
     [SerializeField] private Image image;
-
+    [SerializeField] private Button button;
     public CardData Data { get; private set; }
-
     public bool IsFaceUp { get; private set; }
     public bool IsMatched { get; private set; }
-    [SerializeField] private Button button;
+  
 
     private Action<Card> onSelected;
     private bool isFlipping;
@@ -26,7 +25,9 @@ public class Card : MonoBehaviour
 
     private void Awake()
     {
-        button=GetComponent<Button>();
+        if (button == null)
+           button =GetComponent<Button>();
+        button.onClick.AddListener(OnClick);
     }
     public void Init(CardData data, Sprite back, Action<Card> callback)
     {
@@ -42,34 +43,30 @@ public class Card : MonoBehaviour
 
         image.sprite = backSprite;
         transform.localScale = Vector3.one;
+        gameObject.SetActive(true);
+        button.interactable = true;
     }
-
-    
     public void OnClick()
     {
         if (IsMatched || IsFaceUp || isFlipping) return;
 
         onSelected?.Invoke(this);
     }
-
-
     public void FlipUp()
     {
-        if (IsFaceUp) return;
-        AudioManager.Instance.Play(AudioManager.SFX.Flip);
-        StartCoroutine(Flip(frontSprite));
+        if (!gameObject.activeInHierarchy) return;
+        if (IsFaceUp || isFlipping) return;
+        StartCoroutine(Flip(frontSprite, true));
+        AudioManager.Instance.Play(AudioManager.SFX.Flip);       
     }
-
     public void FlipDown()
     {
-        if (!IsFaceUp) return;
-        AudioManager.Instance.Play(AudioManager.SFX.Flip);
-        StartCoroutine(Flip(backSprite));
+        if (!gameObject.activeInHierarchy) return;
+        if (!IsFaceUp || isFlipping) return;
+        StartCoroutine(Flip(backSprite, false));
+        AudioManager.Instance.Play(AudioManager.SFX.Flip);       
     }
-
- 
-
-    private IEnumerator Flip(Sprite newSprite)
+    private IEnumerator Flip(Sprite newSprite, bool faceUpState)
     {
         isFlipping = true;
 
@@ -86,7 +83,7 @@ public class Card : MonoBehaviour
 
         image.sprite = newSprite;
 
-        IsFaceUp = !IsFaceUp;
+        IsFaceUp = faceUpState;
 
         timer = 0f;
 
@@ -101,10 +98,7 @@ public class Card : MonoBehaviour
 
         transform.localScale = Vector3.one;
         isFlipping = false;
-    }
-
-   
-
+    }  
     public void ResetCard()
     {
         StopAllCoroutines();
@@ -115,20 +109,51 @@ public class Card : MonoBehaviour
         IsMatched = false;
         isFlipping = false;
     }
-
     public void SetMatched()
     {
         if (IsMatched) return;
 
         IsMatched = true;
+        button.interactable = false;
+        StopAllCoroutines();
         StartCoroutine(MatchSequence());
+    }
+    public void SetMatchedInstant()
+    {
+        IsMatched = true;
+        IsFaceUp = true;
+
+        StopAllCoroutines();
+
+        image.sprite = frontSprite;
+        image.color = Color.clear;
+        transform.localScale = Vector3.zero;
+
+        button.interactable = false;
     }
     private IEnumerator MatchSequence()
     {
-        yield return new WaitForSeconds(0.2f);
+       // yield return new WaitForSeconds(0.1f);
+        float duration = 0.2f;
+        float timer = 0f;
+
+        Vector3 startScale = transform.localScale;
+        Color startColor = image.color;
+
+        while (timer < duration)
+        {
+            timer += Time.deltaTime;
+            float t = timer / duration;
+
+            transform.localScale = Vector3.Lerp(startScale, Vector3.zero, t);
+            image.color = Color.Lerp(startColor, Color.clear, t);
+
+            yield return null;
+        }
+        transform.localScale = Vector3.zero;
         AudioManager.Instance?.Play(AudioManager.SFX.Match);
-        yield return PopEffect();
-        yield return Disappear();
+        //yield return PopEffect();
+        //yield return Disappear();
     }
     private IEnumerator PopEffect()
     {
@@ -175,15 +200,11 @@ public class Card : MonoBehaviour
 
         gameObject.SetActive(false);
         button.interactable = false;
-    }
-     
-
+    }    
     public void SetInteractable(bool value)
     {
         button.interactable = value;
-    }
-
-    
+    }    
 }
 
 

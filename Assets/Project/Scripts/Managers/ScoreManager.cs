@@ -9,21 +9,17 @@ public class ScoreManager : MonoBehaviour
     public int TotalTries;
     public int CorrectMatches;
 
-
     private void Awake()
     {
         Instance = this;
     }
-
     public void ResetScore()
     {
         TotalTries = 0;
         CorrectMatches = 0;
     }
-
     public void AddTry() => TotalTries++;
     public void AddCorrect() => CorrectMatches++;
-
     public float GetAccuracy()
     {
         if (TotalTries == 0) return 0;
